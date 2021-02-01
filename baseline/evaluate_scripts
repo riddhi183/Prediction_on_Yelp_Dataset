@@ -1,0 +1,111 @@
+import pandas as pd
+import sys
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.dummy import DummyClassifier
+from sklearn.naive_bayes import GaussianNB
+from xgboost import XGBClassifier
+from sklearn import metrics
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
+
+
+if len(sys.argv) < 4:
+  print('===========================================================')
+  print("Usage - ./run.sh train-attribute-model <CLASSIFIER random-forest/xgboost/naive-bayes default=most_frequent> <ATTRIBUTE FILE> <METHOD test-train/k-fold> <FOLDS/TEST SIZE>")
+  print('=========================Output===============================')
+  print("Training and Testing accuracy")
+  exit()
+
+
+classifier = sys.argv[1]
+method = sys.argv[2]
+input_path = sys.argv[3]
+folds = 10
+test_size = 0.10
+
+
+features = pd.read_csv(input_path)
+labels = np.array(features['stars'].apply(lambda x: str(x)))
+
+print("The unique labels are "+str(np.unique(labels)))
+
+features.drop(columns=['stars',features.columns[0],'business_id'], inplace=True)
+features = np.array(features)
+
+model = DummyClassifier(strategy="most_frequent")
+if classifier == 'random-forest':
+    model = RandomForestClassifier(n_jobs=16)
+elif classifier == 'xgboost':
+    model = XGBClassifier(n_jobs=16)
+elif classifier == 'naive-bayes':
+    model = GaussianNB()
+
+
+errors = 0
+errors_float = 0
+
+if method == 'test-train':
+
+    if len(sys.argv) == 5:
+        test_size = float(sys.argv[4])
+        if test_size > 1 or test_size <= 0:
+            print("0 < Test Size =< 1")
+            exit()
+    folds = 1
+    print("Performing 1 shot test train "+classifier+" classification")
+
+    x_train, x_test, y_train, y_test = train_test_split(features, labels, test_size = test_size)
+
+    print('Training Features Shape:', x_train.shape)
+    print('Training Labels Shape:', y_train.shape)
+    print('Testing Features Shape:', x_test.shape)
+    print('Testing Labels Shape:', y_test.shape)
+
+    model.fit(x_train,y_train)
+
+    y_pred = model.predict(x_test)
+    errors = (y_pred != y_test).sum()
+    errors_float = abs((y_pred.astype(np.float) - y_test.astype(np.float))).sum()
+    print(classification_report(y_test, y_pred))
+
+elif method == 'k-fold':
+
+    if len(sys.argv) == 5:
+        folds = int(sys.argv[4])
+        if folds < 2:
+            print("2 <= Folds")
+            exit()
+
+    print("Performing k fold cross validation classification with "+str(folds)+" folds")
+    kf = KFold(n_splits=folds, shuffle=True)
+    kf.get_n_splits(features)
+    i = 0
+
+    for train_index, test_index in kf.split(features):
+        i += 1
+        print("Running "+classifier+" for fold "+str(i))
+        x_train, x_test = features[train_index], features[test_index]
+        y_train, y_test = labels[train_index], labels[test_index]
+
+        print('Training Features Shape:', x_train.shape)
+        print('Training Labels Shape:', y_train.shape)
+        print('Testing Features Shape:', x_test.shape)
+        print('Testing Labels Shape:', y_test.shape)
+
+        model.fit(x_train, y_train)
+
+        y_pred = model.predict(x_test)
+        errors += (y_pred != y_test).sum()
+        errors_float += abs((y_pred.astype(np.float) - y_test.astype(np.float))).sum()
+        print(classification_report(y_test, y_pred))
+
+print('Mean Absolute Error:', round(np.mean(errors), 2), 'degrees.')
+
+error_perc = 100 * (errors / (len(y_test)*folds))
+accuracy = 100 - error_perc
+print('Accuracy:', round(accuracy, 2), '%.')
+
+print('Mean Absolute Float Error (Difference between values) ', round(errors_float / (len(y_test)*folds),2))
