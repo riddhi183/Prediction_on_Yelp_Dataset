@@ -1,0 +1,158 @@
+import pandas as pd
+import sys
+import os
+import numpy as np
+import math
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import LabelBinarizer
+import tensorflow as tf
+from tensorflow.python import keras
+from tensorflow.python.keras import layers
+from numpy import savetxt
+from sklearn.metrics import classification_report
+
+
+
+def get_model(size, num_classes, opt):
+    inputs = keras.Input(shape=(size), name='input')
+
+    #Tested Neural Net 1
+    """x = layers.Dense(200, kernel_initializer='orthogonal', activation="relu")(inputs)
+    x = layers.Dense(100, kernel_initializer='orthogonal', activation="relu")(x)
+    outputs = layers.Dense(num_classes, activation="softmax")(x)"""
+
+    #Tested Neural Net 2
+    """x = layers.Dense(200, kernel_initializer='orthogonal', activation="relu")(inputs)
+    x = layers.Dropout(0.6)(x)
+    x = layers.Dense(100, kernel_initializer='orthogonal', activation="relu")(x)
+    x = layers.Dropout(0.6)(x)
+    x = layers.Dense(100, kernel_initializer='orthogonal', activation="relu")(x)
+    outputs = layers.Dense(num_classes, activation="softmax")(x)"""
+
+    #Tested Neural Net 3
+    """inputs = keras.Input(shape=(size), name='input')
+    x = layers.Dense(400, kernel_initializer='orthogonal', activation="relu")(inputs)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(200, kernel_initializer='orthogonal', activation="relu")(x)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(100, kernel_initializer='orthogonal', activation="relu")(x)
+    outputs = layers.Dense(num_classes, activation="softmax")(x)
+    model = tf.keras.Model(inputs, outputs, name='Model')"""
+
+    #Tested Neural Net 4
+    """x = layers.Dense(1000, kernel_initializer='orthogonal', activation="relu")(inputs)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(500, kernel_initializer='orthogonal', activation="relu")(x)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(300, kernel_initializer='orthogonal', activation="relu")(x)
+    outputs = layers.Dense(num_classes, activation="softmax")(x)"""
+
+    #Neural Net 5
+    x = layers.Dense(16, kernel_initializer='orthogonal', activation="relu", name="Dense_C1")(inputs)
+    x = layers.Dense(16, kernel_initializer='orthogonal', activation="relu", name="Dense_C2")(x)
+    outputs = layers.Dense(num_classes, activation="softmax", name="Dense_C_Out")(x)
+    model = tf.keras.Model(inputs, outputs, name='Model')
+    model.summary()
+    model.compile(loss=tf.keras.losses.CategoricalCrossentropy(),metrics=['accuracy'],optimizer=opt)
+    return model
+
+if len(sys.argv) < 2:
+  print('===========================================================')
+  print("Usage - ./run.sh train-attribute-model <INPUT FILE> <EPOCHS Default=20> <TEST SIZE Default=0.10> <OPTIMIZER 'Adam/SGD'>")
+  print('=========================Output===============================')
+  print("Training and validation accuracy")
+  print("Models/attribute_model.h5")
+  exit()
+
+input_path = sys.argv[1]
+epochs = 20
+if len(sys.argv) >= 3:
+    epochs = int(sys.argv[2])
+test_size = 0.10
+if len(sys.argv) >= 4:
+    test_size = float(sys.argv[3])
+opt = 'Adam'
+if len(sys.argv) == 5:
+    opt = sys.argv[4]
+
+
+
+features = pd.read_csv(input_path)
+labels = np.array(features['stars'].apply(lambda x: math.floor(x)-1))
+
+classes = np.unique(labels)
+print("The unique labels are "+str(classes))
+
+features.drop(columns=['stars','business_id',features.columns[0]], inplace=True)
+features = np.array(features)
+
+shape = (labels.size, len(classes))
+y = np.zeros(shape)
+rows = np.arange(labels.size)
+y[rows, labels] = 1
+
+if opt == 'SGD':
+    opt = tf.keras.optimizers.SGD(learning_rate=0.001, momentum=0.0, nesterov=True, name='SGD')
+elif opt == 'Adam':
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, amsgrad=True)
+
+accuracy = 0
+errors = 0
+errors_float = 0
+accuracy_res = 0
+
+
+print("Performing 1 shot test train neuralnet classification with dropout 0.2")
+folds = 1
+
+x_train, x_test, y_train, y_test = train_test_split(features, y, test_size = test_size)
+
+print('Training Features Shape:', x_train.shape)
+print('Training Labels Shape:', y_train.shape)
+print('Testing Features Shape:', x_test.shape)
+print('Testing Labels Shape:', y_test.shape)
+
+
+checkpoint_path = "checkpoints/cp-{epoch:04d}.ckpt"
+checkpoint_dir = os.path.dirname(checkpoint_path)
+cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,save_weights_only=True,verbose=1)
+
+model = get_model(x_train.shape[1], len(classes), opt)
+model.fit(x_train, y_train, epochs=epochs, callbacks=[cp_callback],validation_split=test_size)
+model.save("Models/attribute_model.h5")
+
+results = model.evaluate(x_test, y_test)
+print('API loss, API accuracy:', results)
+accuracy_res = results[1]
+
+
+y_pred = model.predict(x_test)
+#print('test loss, test acc:', results)
+#accuracy += results[1]
+final_pred = np.argmax(y_pred, axis=1)
+#final_pred = np.array([round(x/2+1,1) for x in final_pred])
+#savetxt("pred.csv",final_pred,delimiter=",")
+test = np.argmax(y_test, axis=1)
+#test = np.array([round(x/2+1,1) for x in test])
+#savetxt("actual.csv",test,delimiter=",")
+errors = (final_pred != test).sum()
+
+
+print("Unique classes predicted "+str(np.unique(final_pred)))
+print("Unique classes tested "+str(np.unique(test)))
+final_pred = np.array([str(x) for x in final_pred])
+test = np.array([str(x) for x in test])
+print(classification_report(test, final_pred))
+
+errors_float = abs((test.astype(np.float) - final_pred.astype(np.float))).sum()
+
+
+error_perc = 100 * (errors / (len(y_test)*folds))
+accuracy = 100 - error_perc
+
+print('Calculated Accuracy:', round(accuracy, 2), '%.')
+
+print("Avergage Accuracy "+str(accuracy_res/folds))
+
+print('Mean Absolute Float Error (Difference between values) ', round(errors_float / (len(y_test)*folds),2))
