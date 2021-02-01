@@ -1,0 +1,54 @@
+import pandas as pd
+import sys
+import os
+import numpy as np
+from sklearn.utils import resample
+
+if len(sys.argv) < 3:
+  print('===========================================================')
+  print("Usage - ./run.sh balance-data <INPUT CSV FILE> <OUTPUT CSV FILE>")
+  print('=========================Output===============================')
+  print("<OUTPUT CSV FILE>")
+  exit()
+
+input_path = sys.argv[1]
+output_path = sys.argv[2]
+
+features = pd.read_csv(input_path)
+labels = np.array(features['stars'])
+
+y_values = labels
+unique, counts = np.unique(y_values, return_counts=True)
+y_train = y_values[:80]
+y_valid = y_values[81:]
+
+print("Before resampling")
+print("Number of unique classes ",unique)
+print("Number of unique classes ",counts)
+
+df_minority = features.loc[features['stars'].isin([1.])]
+df_minority_upsampled = resample(df_minority, replace=True, n_samples=1200)    # to match majority class
+df_upsampled = pd.concat([features, df_minority_upsampled])
+df_minority = features.loc[features['stars'].isin([1.5])]
+df_minority_upsampled = resample(df_minority, replace=True, n_samples=1200)    # to match majority class
+df_upsampled = pd.concat([df_upsampled, df_minority_upsampled])
+df_minority = features.loc[features['stars'].isin([2.])]
+df_minority_upsampled = resample(df_minority, replace=True, n_samples=900)    # to match majority class
+df_upsampled = pd.concat([df_upsampled, df_minority_upsampled])
+df_minority = features.loc[features['stars'].isin([2.5])]
+df_minority_upsampled = resample(df_minority, replace=True, n_samples=600)    # to match majority class
+df_upsampled = pd.concat([df_upsampled, df_minority_upsampled])
+
+labels = np.array(df_upsampled['stars'])
+
+y_values = labels
+unique, counts = np.unique(y_values, return_counts=True)
+y_train = y_values[:80]
+y_valid = y_values[81:]
+
+print("After resampling")
+print(unique)
+print(counts)
+
+df_upsampled.drop(columns=['Unnamed: 0'], inplace=True)
+df_upsampled.to_csv(output_path)
