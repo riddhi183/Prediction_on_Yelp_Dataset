@@ -1,11 +1,3 @@
-# Project Details
-### Project Title
-#### Team P03 Members
-1.Rohan Mestri rsmestri@ncsu.edu
-2.Riddhi Zunjarrao rzunjar@ncsu.edu
-3.Shreya Sabu ssabu2@ncsu.edu
-4.Prithviraj Chaudhuri pchaudh5@ncsu.edu
-
 # Folder Organization
 Below is a description of the folder structure for the project code
 * `run.sh` - The main bash file which contains calls the required python files based on the arguments passed
